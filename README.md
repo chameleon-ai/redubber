@@ -1,5 +1,9 @@
 # Redubber
 Redubs audio or video with any voice using zero-shot voice cloning.\
+(It runs stuff through a voice changer, basically.)\
+The video stream is copied and the audio is split between a vocal and instrumental track before changing the vocals.\
+Therefore, the final output has a different voice with preserved background noise.
+
 This project leverages the following repositories:
 
 https://github.com/Anjok07/ultimatevocalremovergui
@@ -18,7 +22,7 @@ The script goes through several steps:
 
 ## Installation
 - Clone this repository and `cd` to the top level.
-- Clone the submodules using `git submodule init`. This should produce the `Amphion` and `ultimatevocalremovergui` directories.
+- Clone the submodules using `git submodule update --init`. This should produce the `Amphion` and `ultimatevocalremovergui` directories. (submodules are pointers to other repositories at a specific commit)
 - Create and activate python virtual environment:
   - `python -m venv venv`
   - `source venv/bin/activate` or `venv\Scripts\activate.bat`
@@ -27,8 +31,9 @@ The script goes through several steps:
 - Install the dependencies:
   - `pip install -r requirements.txt`
 - Run the app (current working directory needs to be the top level of the repo):
-  - `python app.py`
-- This is developed on python 3.10 Linux+AMD (ROCM 6.2). I can't speak for compatibility with other configurations.
+  - `python app.py -i input.mp4 -v reference.wav`
+  - See usage section below
+- This is developed on python 3.10 Linux+AMD (ROCM 6.2.4). I can't speak for compatibility with other configurations.
 
 ## Usage
 - Prepare about 30 seconds of your reference voice as an `.mp3` or `.wav`, we'll call this `reference.wav`, but it can have any name.
