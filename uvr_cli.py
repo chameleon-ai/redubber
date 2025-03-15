@@ -1,9 +1,18 @@
+# Note: This stuff was taken from UVR.py and bastardized to work for one specific model.
+# It's VERY likely that other models don't work, especially anything outside MDX_NET.
+# The main problem with running separate.py is the ModelData() class, which is entangled
+# with the 'root' GUI window object. Below is a copy of ModelData with root sloppily removed.
+# In addition to ModelData, the minimum amount of helper functions and global definitions
+# from UVR.py was also copied over. uvr_separate() is based on how UVR.py uses separate.
+# This module assumes that it's one directory up from ultimatevocalremovergui
+
 import hashlib
 import json
 import os
 import sys
 import yaml
 from ml_collections import ConfigDict
+from huggingface_hub import hf_hub_download
 # Need to add uvr to module search path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'ultimatevocalremovergui'))
 from ultimatevocalremovergui.gui_data.constants import *
@@ -356,12 +365,17 @@ def cached_source_callback(process_method, model_name=None):
             sources = value
     return model, sources
 
-def uvr_separate(filename : str, export_path = './'):
+def uvr_separate(filename : str, export_path = './', count = 1, cpu_only = False):
+    # Download the model if it's not downloaded yet
+    if not os.path.exists(MDX_MODELS_DIR):
+        os.makedirs(MDX_MODELS_DIR)
+    hf_hub_download(repo_id="Politrees/UVR_resources", filename="MDX23C_models/MDX23C-8KFFT-InstVoc_HQ.ckpt", local_dir=MDX_MODELS_DIR)
     print('Initializing UVR...',end='')
     model = ModelData(model_name='MDX23C_models/MDX23C-8KFFT-InstVoc_HQ.ckpt')
-    file_num = 1
-    audio_file_base = f"{file_num}_{os.path.splitext(os.path.basename(filename))[0]}"
-    set_progress_bar = lambda step, inference_iterations=0 : print('\r{0:07.4f}% '.format(inference_iterations*100), end='')
+    if cpu_only:
+        model.is_gpu_conversion = -1
+    audio_file_base = f"{count}_{os.path.splitext(os.path.basename(filename))[0]}"
+    set_progress_bar = lambda step, inference_iterations=0 : print('\r{0:07.4f}% '.format(inference_iterations / step * 10), end='')
     write_to_console = lambda progress_text, base_text='':print('{} {}'.format(base_text,progress_text),end='')
 
     process_data = {
@@ -381,11 +395,21 @@ def uvr_separate(filename : str, export_path = './'):
     seperator = SeperateMDXC(model, process_data)
     
     seperator.seperate()
-    print('Clearing GPU Cache.')
-    clear_gpu_cache()
+    if not cpu_only:
+        print('Clearing GPU Cache.')
+        clear_gpu_cache()
+    # Return output filenames of stems (note that this won't match if you change the model to something with different stem names, like denoise)
+    # Also note that save_format is hard-coded to MP3 and mp3_bit_set is hard-coded to 120k
+    # Changing model.save_format to WAV does work and the wav_type_set is hard-coded to PCM_32
+    audio_file_ext = model.save_format.lower()
+    output_vocal_stem = os.path.join(export_path,'{}_(Vocals).{}'.format(audio_file_base,audio_file_ext))
+    output_instrumental_stem = os.path.join(export_path, '{}_(Instrumental).{}'.format(audio_file_base,audio_file_ext))
+    return output_vocal_stem, output_instrumental_stem
 
 if __name__ == '__main__':
     filenames = sys.argv[1:]
-    for filename in filenames:
+    for idx, filename in enumerate(filenames):
         print(filename)
-        uvr_separate(filename)
+        vocal_stem, instrumental_stem = uvr_separate(filename, count = idx + 1)
+        print(vocal_stem)
+        print(instrumental_stem)
