@@ -1,10 +1,15 @@
 import hashlib
 import json
 import os
+import sys
 import yaml
 from ml_collections import ConfigDict
+# Need to add uvr to module search path
+sys.path.append(os.path.join(os.path.dirname(__file__), 'ultimatevocalremovergui'))
 from ultimatevocalremovergui.gui_data.constants import *
-from ultimatevocalremovergui.lib_v5.vr_network.model_param_init import ModelParameters
+from ultimatevocalremovergui.separate import (
+    SeperateMDXC, clear_gpu_cache
+)
 MDX_MODELS_DIR = './models'
 MDX_HASH_DIR = './ultimatevocalremovergui/models/MDX_Net_Models/model_data'
 MDX_HASH_JSON = os.path.join(MDX_HASH_DIR, 'model_data.json')
@@ -334,3 +339,53 @@ class ModelData():
                 
         #print(self.model_name," - ", self.model_hash)
 
+vr_cache_source_mapper = {}
+mdx_cache_source_mapper = {}
+demucs_cache_source_mapper = {}
+def cached_source_callback(process_method, model_name=None):
+    model, sources = None, None
+    if process_method == VR_ARCH_TYPE:
+        mapper = vr_cache_source_mapper
+    if process_method == MDX_ARCH_TYPE:
+        mapper = mdx_cache_source_mapper
+    if process_method == DEMUCS_ARCH_TYPE:
+        mapper = demucs_cache_source_mapper
+    for key, value in mapper.items():
+        if model_name in key:
+            model = key
+            sources = value
+    return model, sources
+
+def uvr_separate(filename : str, export_path = './'):
+    print('Initializing UVR...',end='')
+    model = ModelData(model_name='MDX23C_models/MDX23C-8KFFT-InstVoc_HQ.ckpt')
+    file_num = 1
+    audio_file_base = f"{file_num}_{os.path.splitext(os.path.basename(filename))[0]}"
+    set_progress_bar = lambda step, inference_iterations=0 : print('\r{0:07.4f}% '.format(inference_iterations*100), end='')
+    write_to_console = lambda progress_text, base_text='':print('{} {}'.format(base_text,progress_text),end='')
+
+    process_data = {
+        'model_data': model, 
+        'export_path': export_path,
+        'audio_file_base': audio_file_base,
+        'audio_file': filename,
+        'set_progress_bar': set_progress_bar,
+        'write_to_console': write_to_console,
+        'process_iteration': None,
+        'cached_source_callback': cached_source_callback,
+        'cached_model_source_holder': None,
+        'list_all_models': [],
+        'is_ensemble_master': False,
+        'is_4_stem_ensemble': False}
+
+    seperator = SeperateMDXC(model, process_data)
+    
+    seperator.seperate()
+    print('Clearing GPU Cache.')
+    clear_gpu_cache()
+
+if __name__ == '__main__':
+    filenames = sys.argv[1:]
+    for filename in filenames:
+        print(filename)
+        uvr_separate(filename)
