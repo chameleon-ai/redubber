@@ -2,5 +2,9 @@ __pycache__/
 venv/
 models/.cache
 models/MDX23C_models
+models/Vevo
 *.mp3
 *.wav
+*.webm
+*.mp4
+*.mkv

@@ -2,3 +2,7 @@
 	path = ultimatevocalremovergui
 	url = https://github.com/Anjok07/ultimatevocalremovergui.git
 	ignore = untracked
+[submodule "Amphion"]
+	path = Amphion
+	url = https://github.com/open-mmlab/Amphion
+	ignore = untracked

@@ -16,3 +16,31 @@ onnxruntime
 pydub
 pytorch_lightning
 ml_collections
+
+# Amphion vevo
+numpy==1.26.4
+py3langid==0.2.2
+librosa
+accelerate
+ipython
+transformers==4.47.1
+einops
+pyworld
+json5
+ruamel.yaml
+six
+huggingface_hub
+pydub
+pyopenjtalk
+pykakasi
+jieba
+cn2an
+pypinyin
+onnxruntime
+unidecode
+inflect
+phonemizer
+LangSegment
+standard-aifc; python_version>='3.13'
+standard-sunau; python_version>='3.13'
+audioop-lts; python_version>='3.13'
