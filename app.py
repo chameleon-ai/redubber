@@ -1,6 +1,8 @@
 import argparse
+import mimetypes
 import os
 import signal
+import subprocess
 import traceback
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
@@ -16,6 +18,71 @@ def cleanup():
                 os.remove(filename)
 def signal_handler(sig, frame):
     cleanup()
+
+# Finds a new filename that doesn't clash with something else
+def get_unique_filename(basename : str, extension : str):
+    filename = '{}.{}'.format(basename,extension)
+    x = 0
+    while os.path.isfile(filename):
+        x += 1
+        filename = '{}-{}.{}'.format(basename,x,extension)
+    return filename
+
+# Converts an audio file to wav if needed
+def get_wav(filename, out_dir='./'):
+    # Possible mime types: https://www.iana.org/assignments/media-types/media-types.xhtml
+    mime, encoding = mimetypes.guess_type(filename)
+    if mime == 'audio/wav' or mime == 'audio/x-wav':
+        return filename
+    elif mime == 'audio/mpeg':
+        seg = AudioSegment.from_mp3(filename)
+        # Create a new file in the output directory named after the input
+        wav_filename = get_unique_filename(os.path.join(out_dir, os.path.splitext(os.path.basename(filename))[0]), 'wav')
+        seg.export(wav_filename, format="wav")
+        files_to_clean.append(wav_filename)
+        return wav_filename
+    else:
+        raise RuntimeError("Unsupported file type {} for file '{}'".format(mime, filename))
+
+def separate_audio_from_video(video_input, out_dir='./'):
+    # Create a temp file that has no sound
+    video_no_audio = get_unique_filename(os.path.join(out_dir, os.path.splitext(os.path.basename(video_input))[0]), os.path.splitext(video_input)[-1].replace('.',''))
+    files_to_clean.append(video_no_audio)
+    ffmpeg_cmd1 = ["ffmpeg", '-hide_banner', '-i', video_input, '-c:v', 'copy', '-an', video_no_audio]
+    result = subprocess.run(ffmpeg_cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0 or not os.path.isfile(video_no_audio):
+        print(' '.join(ffmpeg_cmd1))
+        print(result.stderr)
+        raise RuntimeError('Error rendering temp video. ffmpeg return code: {}'.format(result.returncode))
+    audio_no_video = get_unique_filename(os.path.join(out_dir, os.path.splitext(os.path.basename(video_input))[0]), 'mp3')
+    ffmpeg_cmd2 = ["ffmpeg", '-hide_banner', '-i', video_input, '-vn', '-acodec', 'mp3', '-b:a', '128k', audio_no_video]
+    result = subprocess.run(ffmpeg_cmd2, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0 or not os.path.isfile(video_no_audio):
+        print(' '.join(ffmpeg_cmd2))
+        print(result.stderr)
+        raise RuntimeError('Error rendering audio. ffmpeg return code: {}'.format(result.returncode))
+    return video_no_audio, audio_no_video
+
+def combine_audio_and_video(video_input, audio_input, out_dir = './'):
+    category, mimetype = mimetypes.guess_type(video_input)[0].split('/')
+    ffmpeg_cmd = ["ffmpeg", '-hide_banner', '-i', video_input, '-i', audio_input, '-c:v', 'copy', '-c:a']
+    # Determine which type of audio to use for recombine
+    if mimetype == 'mp4':
+        print('Using mp4/aac')
+        ffmpeg_cmd.append('aac')
+    elif mimetype == 'webm':
+        print('Using webm/opus')
+        ffmpeg_cmd.append('libopus')
+    else:
+        raise RuntimeError('Unsupported mime type {}/{}'.format(category, mimetype))
+    output_filename = get_unique_filename(os.path.join(out_dir, os.path.splitext(os.path.basename(video_input))[0]), os.path.splitext(video_input)[-1].replace('.',''))
+    ffmpeg_cmd.append(output_filename)
+    result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0 or not os.path.isfile(output_filename):
+        print(' '.join(ffmpeg_cmd))
+        print(result.stderr)
+        raise RuntimeError('Error rendering video. ffmpeg return code: {}'.format(result.returncode))
+    return output_filename
 
 # Split vocals into segments separated by silence if necessary
 def prepare_vocal_segments(input_vocal_stem : str, max_duration : float, min_silence_len : int, silence_thresh : int):
@@ -71,8 +138,8 @@ if __name__ == '__main__':
         signal.signal(signal.SIGINT, signal_handler)
         parser = argparse.ArgumentParser(
             prog='Redubber',
-            description='Redubs stuff',
-            epilog='')
+            description='Redubs audio or video using a reference voice.',
+            epilog='Specify the inputs on the command-line. Use -i and -v to explicitly specify input type if context specific parsing fails.')
         parser.add_argument('-i', '--input', type=str, help='Input video or audio to process')
         parser.add_argument('-v', '--reference_voice', type=str, help='Voice reference to redub with')
         parser.add_argument('--instrumental_volume', type=int, default=-3, help='Boost (or reduce) volume of the instrumental track, in dB')
@@ -83,34 +150,59 @@ if __name__ == '__main__':
         parser.add_argument('-k', '--keep_temp_files', action='store_true', help='Keep intermediate temp files')
         args, unknown_args = parser.parse_known_args()
         input_filename = None
+        reference_voice = None
         if args.keep_temp_files:
             do_cleanup = False
         if args.input is not None: # Input was explicitly specified
             input_filename = args.input
-        elif len(unknown_args) > 0: # Input was specified as an unknown argument, attempt smart context parsing
+        if len(unknown_args) > 0: # Input was specified as an unknown argument, attempt smart context parsing
             for arg in unknown_args:
-                if os.path.isfile(arg):
-                    input_filename = arg
+                if os.path.isfile(arg): 
+                    category, mimetype = mimetypes.guess_type(arg)[0].split('/')
+                    #print('{}/{}'.format(category,mimetype))
+                    if category == 'video' and args.input is None:
+                        input_filename = arg
+                    # Ambiguous case where audio is specified but can't differentiate between input to process and voice reference
+                    elif category == 'audio' and args.input is None and args.reference_voice is None:
+                        raise RuntimeError("Can't determine if audio file should be input or reference voice. Please specify -i or -v explicitly.")
+                    elif category == 'audio' and args.reference_voice is None:
+                        args.reference_voice = arg
+                    elif category == 'audio' and args.input is None:
+                        input_filename = arg
         if args.reference_voice is None:
-            print('Reference voice sample required.')
+            raise RuntimeError('Reference voice sample required.')
+        else: # Convert specified reference to wav if necessary
+            reference_voice = get_wav(args.reference_voice)
         if help in args:
             parser.print_help()
-
-        vocal_stem, intrumental_stem = uvr_separate(input_filename)
+        input_category, input_mimetype = mimetypes.guess_type(input_filename)[0].split('/')
+        uvr_input = input_filename
+        video_no_audio = None
+        if input_category == 'video':
+            print('Separating audio from video')
+            video_no_audio, audio_no_video = separate_audio_from_video(input_filename)
+            files_to_clean.extend([video_no_audio, audio_no_video])
+            uvr_input = audio_no_video
+        vocal_stem, intrumental_stem = uvr_separate(uvr_input)
         files_to_clean.extend([vocal_stem, intrumental_stem])
         vocal_segments = prepare_vocal_segments(vocal_stem, args.max_segment_duration, args.min_silence_len, args.silence_thresh)
         files_to_clean.extend(vocal_segments)
         print('Total segments to process: {}'.format(len(vocal_segments)))
-        coverted_vocals = vevo_infer(vocal_segments, args.reference_voice)
+        coverted_vocals = vevo_infer(vocal_segments, reference_voice)
         files_to_clean.extend(coverted_vocals)
-        reassembled_vocals = recombine_segments(input_filename, coverted_vocals)
+        reassembled_vocals = recombine_segments(uvr_input, coverted_vocals)
         files_to_clean.append(reassembled_vocals)
-        recombined = recombine_stems(input_filename, reassembled_vocals, intrumental_stem, args.instrumental_volume, args.vocal_volume)
-        print('Output file: {}'.format(recombined))
-        cleanup()
+        recombined = recombine_stems(uvr_input, reassembled_vocals, intrumental_stem, args.instrumental_volume, args.vocal_volume)
+        if video_no_audio is not None:
+            files_to_clean.append(recombined)
+            final_video = combine_audio_and_video(video_no_audio, recombined)
+            print('Output file: {}'.format(final_video))
+        else:
+            print('Output file: {}'.format(recombined))
     except argparse.ArgumentError as e:
         print(e)
     except ValueError as e:
         print(e)
     except Exception:
         print(traceback.format_exc())
+    cleanup()
