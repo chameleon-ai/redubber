@@ -2,3 +2,5 @@ __pycache__/
 venv/
 models/.cache
 models/MDX23C_models
+*.mp3
+*.wav

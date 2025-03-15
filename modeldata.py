@@ -261,7 +261,7 @@ class ModelData():
             self.bv_model_rebalance = self.model_data[IS_BV_MODEL_REBAL]#
    
     def get_mdx_model_path(self):
-        self.model_path = 'models/MDX23C_models/MDX23C-8KFFT-InstVoc_HQ.ckpt'
+        self.model_path = os.path.join(MDX_MODELS_DIR, self.model_name)
         if self.model_name.endswith(CKPT):
             self.is_mdx_ckpt = True     
         self.mixer_path = os.path.join(MDX_MODELS_DIR, f"mixer_val.ckpt")
