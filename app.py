@@ -1,6 +1,7 @@
 import argparse
 import mimetypes
 import os
+import shutil
 import signal
 import subprocess
 import traceback
@@ -29,7 +30,7 @@ def get_unique_filename(basename : str, extension : str):
     return filename
 
 # Converts an audio file to wav if needed
-def get_wav(filename, out_dir='./'):
+def get_wav(filename : str, out_dir='./'):
     # Possible mime types: https://www.iana.org/assignments/media-types/media-types.xhtml
     mime, encoding = mimetypes.guess_type(filename)
     if mime == 'audio/wav' or mime == 'audio/x-wav':
@@ -44,10 +45,9 @@ def get_wav(filename, out_dir='./'):
     else:
         raise RuntimeError("Unsupported file type {} for file '{}'".format(mime, filename))
 
-def separate_audio_from_video(video_input, out_dir='./'):
+def separate_audio_from_video(video_input : str, out_dir='./'):
     # Create a temp file that has no sound
     video_no_audio = get_unique_filename(os.path.join(out_dir, os.path.splitext(os.path.basename(video_input))[0]), os.path.splitext(video_input)[-1].replace('.',''))
-    files_to_clean.append(video_no_audio)
     ffmpeg_cmd1 = ["ffmpeg", '-hide_banner', '-i', video_input, '-c:v', 'copy', '-an', video_no_audio]
     result = subprocess.run(ffmpeg_cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0 or not os.path.isfile(video_no_audio):
@@ -63,7 +63,7 @@ def separate_audio_from_video(video_input, out_dir='./'):
         raise RuntimeError('Error rendering audio. ffmpeg return code: {}'.format(result.returncode))
     return video_no_audio, audio_no_video
 
-def combine_audio_and_video(video_input, audio_input, out_dir = './'):
+def combine_audio_and_video(video_input :str, audio_input : str, audio_bitrate : int, out_dir = './'):
     category, mimetype = mimetypes.guess_type(video_input)[0].split('/')
     ffmpeg_cmd = ["ffmpeg", '-hide_banner', '-i', video_input, '-i', audio_input, '-c:v', 'copy', '-c:a']
     # Determine which type of audio to use for recombine
@@ -75,6 +75,7 @@ def combine_audio_and_video(video_input, audio_input, out_dir = './'):
         ffmpeg_cmd.append('libopus')
     else:
         raise RuntimeError('Unsupported mime type {}/{}'.format(category, mimetype))
+    ffmpeg_cmd.extend(['-b:a', '{}k'.format(audio_bitrate)])
     output_filename = get_unique_filename(os.path.join(out_dir, os.path.splitext(os.path.basename(video_input))[0]), os.path.splitext(video_input)[-1].replace('.',''))
     ffmpeg_cmd.append(output_filename)
     result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -117,7 +118,7 @@ def recombine_segments(original_input : str, vocal_segments : list):
     return output_filename
 
 # Overlay the vocal and instrumental stems back on top of each other
-def recombine_stems(original_input : str, input_vocal_stem : str, input_instrumental_stem : str, instrumental_volume : int, vocal_volume : int):
+def recombine_stems(original_input : str, input_vocal_stem : str, input_instrumental_stem : str, instrumental_volume : int, vocal_volume : int, audio_bitrate : int):
     print('Overlaying vocal and instrumental stems.')
     vocal_segment = AudioSegment.from_file(input_vocal_stem)
     instrumental_segment = AudioSegment.from_file(input_instrumental_stem)
@@ -129,7 +130,7 @@ def recombine_stems(original_input : str, input_vocal_stem : str, input_instrume
         vocal_segment = vocal_segment + vocal_volume
     overlaid = instrumental_segment.overlay(vocal_segment)
     output_filename = os.path.splitext(os.path.basename(original_input))[0] + '_(Overlaid).mp3'
-    overlaid.export(output_filename, format="mp3", bitrate="128k")
+    overlaid.export(output_filename, format="mp3", bitrate="{}k".format(audio_bitrate))
     return output_filename
      
 
@@ -147,6 +148,7 @@ if __name__ == '__main__':
         parser.add_argument('--max_segment_duration', type=float, default=30.0, help='Maximum vocal segment duration')
         parser.add_argument('--min_silence_len', type=int, default=350, help='minimum length (in ms) of silence when splitting vocals into chunks')
         parser.add_argument('--silence_thresh', type=int, default=-48, help='(in dBFS) anything quieter than this will be considered silence')
+        parser.add_argument('--audio_bitrate', type=int, default=128, help='Bitrate, in kbps, of the final output audio. Default is 128.')
         parser.add_argument('-k', '--keep_temp_files', action='store_true', help='Keep intermediate temp files')
         args, unknown_args = parser.parse_known_args()
         input_filename = None
@@ -161,6 +163,7 @@ if __name__ == '__main__':
                     category, mimetype = mimetypes.guess_type(arg)[0].split('/')
                     #print('{}/{}'.format(category,mimetype))
                     if category == 'video' and args.input is None:
+                        args.input = arg
                         input_filename = arg
                     # Ambiguous case where audio is specified but can't differentiate between input to process and voice reference
                     elif category == 'audio' and args.input is None and args.reference_voice is None:
@@ -192,13 +195,20 @@ if __name__ == '__main__':
         files_to_clean.extend(coverted_vocals)
         reassembled_vocals = recombine_segments(uvr_input, coverted_vocals)
         files_to_clean.append(reassembled_vocals)
-        recombined = recombine_stems(uvr_input, reassembled_vocals, intrumental_stem, args.instrumental_volume, args.vocal_volume)
+        recombined_audio = recombine_stems(uvr_input, reassembled_vocals, intrumental_stem, args.instrumental_volume, args.vocal_volume, args.audio_bitrate)
+        
         if video_no_audio is not None:
-            files_to_clean.append(recombined)
-            final_video = combine_audio_and_video(video_no_audio, recombined)
-            print('Output file: {}'.format(final_video))
+            files_to_clean.append(recombined_audio)
+            recombined_video = combine_audio_and_video(video_no_audio, recombined_audio, args.audio_bitrate)
+            split = os.path.splitext(os.path.basename(input_filename))
+            output_filename = split[0] + '_(Redub)' + split[-1]
+            shutil.move(recombined_video, output_filename)
+            print('Output file: {}'.format(output_filename))
         else:
-            print('Output file: {}'.format(recombined))
+            split = os.path.splitext(os.path.basename(input_filename))
+            output_filename = split[0] + '_(Redub)' + split[-1]
+            shutil.move(recombined_audio, output_filename)
+            print('Output file: {}'.format(output_filename))
     except argparse.ArgumentError as e:
         print(e)
     except ValueError as e:
