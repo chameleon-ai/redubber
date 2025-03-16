@@ -59,7 +59,7 @@ def separate_audio_from_video(video_input : str, out_dir='./'):
         print(result.stderr)
         raise RuntimeError('Error rendering temp video. ffmpeg return code: {}'.format(result.returncode))
     audio_no_video = get_unique_filename(os.path.join(out_dir, os.path.splitext(os.path.basename(video_input))[0]), 'mp3')
-    ffmpeg_cmd2 = ["ffmpeg", '-hide_banner', '-i', video_input, '-vn', '-acodec', 'mp3', '-b:a', '128k', audio_no_video]
+    ffmpeg_cmd2 = ["ffmpeg", '-hide_banner', '-i', video_input, '-vn', '-acodec', 'mp3', '-b:a', '192k', audio_no_video]
     result = subprocess.run(ffmpeg_cmd2, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0 or not os.path.isfile(video_no_audio):
         print(' '.join(ffmpeg_cmd2))
@@ -92,6 +92,34 @@ def combine_audio_and_video(video_input :str, audio_input : str, audio_bitrate :
         raise RuntimeError('Error rendering video. ffmpeg return code: {}'.format(result.returncode))
     return output_filename
 
+# For when the initial split attempt isn't enough. Returns the segment split into smaller segments, recursively if needed.
+def extra_split(segment : AudioSegment, max_duration : float, min_silence_len : int, silence_thresh : int, print_padding = '  '):
+    extra_segments = []
+    # Split again, raising the silence threshold and lowering the min silence length
+    segments = split_on_silence(segment, min_silence_len=min_silence_len - 10, silence_thresh=silence_thresh + 5, keep_silence=True)
+    for seg in segments:
+        if seg.duration_seconds <= max_duration: # Good segment
+            extra_segments.append(seg)
+        else: # Recursive split with higher thresholds
+            #print('{}Segment is {:.3f} seconds. Resorting to recursive split.'.format(print_padding,seg.duration_seconds))
+            extra_segments.extend(extra_split(seg, max_duration, min_silence_len - 10, silence_thresh + 5, print_padding+'  '))
+    
+    current_segment = AudioSegment.empty()
+    rejoined_segments = []
+    # Splitting might cause more fragments than necessary, so rejoin short ones if possible
+    for idx, seg in enumerate(extra_segments):
+        if current_segment.duration_seconds + seg.duration_seconds < max_duration: # Current segment can be added
+            new_segment = current_segment + seg
+            current_segment = new_segment
+        else: # Segment length exceeds max, add segment and start over with new segment
+            rejoined_segments.append(current_segment) # Append segment
+            current_segment = seg # Replace segment with current one not added
+        # Don't forget the  last segment         
+        if idx == len(extra_segments) - 1 and current_segment.duration_seconds > 0.0: 
+            rejoined_segments.append(current_segment)
+    #print('{}Segment was split into {} smaller segments.'.format(print_padding, len(rejoined_segments)))
+    return rejoined_segments
+
 # Split vocals into segments separated by silence if necessary
 def prepare_vocal_segments(input_vocal_stem : str, max_duration : float, min_silence_len : int, silence_thresh : int):
     print('Preparing vocal segments')
@@ -108,9 +136,11 @@ def prepare_vocal_segments(input_vocal_stem : str, max_duration : float, min_sil
         for idx, seg in enumerate(split_segments):
             #print(current_segment.duration_seconds)
             if seg.duration_seconds > max_duration: # Segment already exceeds max
-                print('Warning: Segment is {:.3f} seconds.'.format(seg.duration_seconds))
                 rejoined_segments.append(current_segment)
-                rejoined_segments.append(seg)
+                print('  Warning: Segment is {:.3f} seconds. Attempting to split further...'.format(seg.duration_seconds))
+                extra_segments = extra_split(seg, max_duration, min_silence_len, silence_thresh)
+                print('  Segment was split into {} smaller segments.'.format(len(extra_segments)))
+                rejoined_segments.extend(extra_segments)
                 current_segment = AudioSegment.empty() # Clear out past segment
             elif current_segment.duration_seconds + seg.duration_seconds < max_duration: # Current segment can be added
                 new_segment = current_segment + seg
@@ -126,13 +156,13 @@ def prepare_vocal_segments(input_vocal_stem : str, max_duration : float, min_sil
         for idx, seg in enumerate(rejoined_segments):
             rejoined_duration += seg.duration_seconds
             segment_name = '{}{}.wav'.format(segment_base_name, idx)
-            seg.export(segment_name, format="wav")
+            seg.export(segment_name, format="wav", bitrate="192k")
             segments.append(segment_name)
         if abs(rejoined_duration - total_duration) > 0.01:
             print('Warning: split segments total {:.3f} seconds, but input audio was {:.3f} seconds.'.format(rejoined_duration, total_duration))
     else: # Only one segment, still have to convert to wav
         segments.append(segment_base_name + '0.wav')
-        vocal_segment.export(segments[0], format="wav")
+        vocal_segment.export(segments[0], format="wav", bitrate="192k")
     return segments
 
 # Concatenate all vocal segments back into one segment
@@ -143,7 +173,7 @@ def recombine_segments(original_input : str, vocal_segments : list):
         next_segment = AudioSegment.from_file(seg)
         recombined = recombined + next_segment
     output_filename = os.path.splitext(os.path.basename(original_input))[0] + '_(Recombined).mp3'
-    recombined.export(output_filename, format="mp3", bitrate="128k")
+    recombined.export(output_filename, format="mp3", bitrate="192k")
     return output_filename
 
 # Overlay the vocal and instrumental stems back on top of each other
