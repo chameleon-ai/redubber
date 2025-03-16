@@ -46,11 +46,13 @@ The script goes through several steps:
 ## Command-Line Flags
 - `-i`/`--input` - The input file to redub (i.e. `-i input.mp4`)
 - `-v`/`--reference_voice` - The reference voice to redub with (i.e. `-v reference.wav`)
+- `--inference_mode` - The vevo inference mode to use, either `timbre` or `style`. The default, `timbre`, uses the reference voiceprint, but the input accent will remain. `style` mode attempts to mimic the reference accent, but it is less reliable than `timbre` mode and requires shorter audio segments. Maximum reference voice length in `timbre` mode is 45 seconds, while maximum reference voice length in `style` mode is 15 seconds.
+- `--steps` - The number of vevo flow matching steps. Default is 48. Typically you don't have to mess with this.
 - `--instrumental_volume` - Adjust the volume, in dB, of the instrumental track by this amount (i.e. `--instrumental_volume -3` will reduce the volume by 3dB)
-- `--vocal_volume` - Adjust the volume, in dB, of the vocal track by this amount (i.e. `--vocal_volume 4` will boost the volume by 4dB)
-- `--max_segment_duration` - Change the maximum segment duration, in seconds, allowed before attempting to split the vocal track into segments. (i.e. `--max_segment_duration 41.2` will allow the clip to be 41.2 seconds long)
+- `--vocal_volume` - Adjust the volume, in dB, of the vocal track by this amount (i.e. `--vocal_volume 4` will boost the volume by 4dB). You may want to do this if the output voice is too quiet.
+- `--max_segment_duration` - Override the default maximum segment duration, in seconds, of the input vocal segments. (i.e. `--max_segment_duration 41.2` will split the input into clips up to 41.2 seconds long. Changing this value is not recommended and may break vevo.)
 - `--min_silence_len` - minimum length (in ms) of silence when splitting vocals into chunks. Default is 350.
-- `--silence_thresh` - Silence threchold (in dBFS) used when splitting vocals. Anything quieter than this will be considered silence. Default is -48.
+- `--silence_thresh` - Silence threshold (in dBFS) used when splitting vocals. Anything quieter than this will be considered silence. Default is -48.
 - `--audio_bitrate` - Bitrate, in kbps, of the final output audio. Default is 128.
 - `-k`/`--keep_temp_files` - Keep intermediate temp files. Warning: This can result in a lot of clutter in your current working directory, so only use this flag if you want to debug something like the segment silence threshold or inspect the original vocal track or something.
 

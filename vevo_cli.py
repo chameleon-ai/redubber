@@ -16,7 +16,7 @@ def run_inference(pipeline : vevo_utils.VevoInferencePipeline,
                   ref_style : str,
                   ref_timbre : str,
                   steps : int):
-    if mode == 'voice':
+    if mode == 'style':
         return pipeline.inference_ar_and_fm(
             src_wav_path=content,
             src_text=None,
@@ -31,7 +31,7 @@ def run_inference(pipeline : vevo_utils.VevoInferencePipeline,
             flow_matching_steps=steps
         )
     else:
-        raise RuntimeError("Unrecognized inference mode '{}'".format(mode))
+        raise RuntimeError("Unrecognized inference mode '{}'. Specify either 'style' or 'timbre'.".format(mode))
 
 def load_model():
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -100,14 +100,14 @@ def load_model():
     )
     return pipeline
 
-def vevo_infer(voice_segments : list, reference_voice : str):
+def vevo_infer(voice_segments : list, reference_voice : str, inference_mode = 'timbre', flow_matching_steps = 32):
     print('Running vevo inference...')
     outputs = []
     pipeline = load_model()
     for segment in voice_segments:
         output_filename = '{}_({}).wav'.format(os.path.splitext(os.path.basename(segment))[0], os.path.splitext(os.path.basename(reference_voice))[0])
         print(output_filename)
-        gen_audio = run_inference(pipeline, 'timbre', segment, reference_voice, reference_voice, 32)
+        gen_audio = run_inference(pipeline, inference_mode, segment, reference_voice, reference_voice, flow_matching_steps)
         vevo_utils.save_audio(gen_audio, target_sample_rate=48000, output_path=output_filename)
         outputs.append(output_filename)
     return outputs
