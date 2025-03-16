@@ -73,6 +73,9 @@ def combine_audio_and_video(video_input :str, audio_input : str, audio_bitrate :
     elif mimetype == 'webm':
         print('Using webm/opus')
         ffmpeg_cmd.append('libopus')
+    elif mimetype == 'x-matroska':
+        print('Using mkv/opus')
+        ffmpeg_cmd.append('libopus')
     else:
         raise RuntimeError('Unsupported mime type {}/{}'.format(category, mimetype))
     ffmpeg_cmd.extend(['-b:a', '{}k'.format(audio_bitrate)])
