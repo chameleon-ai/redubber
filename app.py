@@ -225,6 +225,7 @@ if __name__ == '__main__':
         parser.add_argument('--min_silence_len', type=int, default=350, help='minimum length (in ms) of silence when splitting vocals into chunks')
         parser.add_argument('--silence_thresh', type=int, default=-48, help='(in dBFS) anything quieter than this will be considered silence')
         parser.add_argument('--audio_bitrate', type=int, default=128, help='Bitrate, in kbps, of the final output audio. Default is 128.')
+        parser.add_argument('--skip_uvr', action='store_true', help='Skip Ultimate Vocal Remover inference')
         parser.add_argument('-k', '--keep_temp_files', action='store_true', help='Keep intermediate temp files')
         args, unknown_args = parser.parse_known_args()
         input_filename = None
@@ -271,8 +272,15 @@ if __name__ == '__main__':
         if reference_duration > max_reference_duration:
             raise RuntimeError('Reference audio duration of {} seconds exceeds max duration of {} seconds for {} inference mode. Please use shorter reference voice.'.format(reference_duration, max_reference_duration, args.inference_mode))
 
-        vocal_stem, intrumental_stem = uvr_separate(uvr_input)
-        files_to_clean.extend([vocal_stem, intrumental_stem])
+        # Detect if we want to skip the uvr step
+        vocal_stem = None
+        intrumental_stem = None
+        if not args.skip_uvr:
+            vocal_stem, intrumental_stem = uvr_separate(uvr_input)
+            files_to_clean.extend([vocal_stem, intrumental_stem])
+        else:
+            vocal_stem = uvr_input
+        
         vocal_segments = prepare_vocal_segments(vocal_stem, args.max_segment_duration, args.min_silence_len, args.silence_thresh)
         files_to_clean.extend(vocal_segments)
         print('Total segments to process: {}'.format(len(vocal_segments)))
@@ -280,7 +288,13 @@ if __name__ == '__main__':
         files_to_clean.extend(coverted_vocals)
         reassembled_vocals = recombine_segments(uvr_input, coverted_vocals, vocal_segments)
         files_to_clean.append(reassembled_vocals)
-        recombined_audio = overlay_stems(uvr_input, reassembled_vocals, intrumental_stem, args.instrumental_volume, args.vocal_volume, args.audio_bitrate)
+
+        # If uvr was skipped, we don't have to overlay the vocal + instrumental stems
+        recombined_audio = None
+        if not args.skip_uvr:
+            recombined_audio = overlay_stems(uvr_input, reassembled_vocals, intrumental_stem, args.instrumental_volume, args.vocal_volume, args.audio_bitrate)
+        else:
+            recombined_audio = reassembled_vocals
         
         if video_no_audio is not None:
             files_to_clean.append(recombined_audio)

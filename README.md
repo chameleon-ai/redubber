@@ -54,6 +54,7 @@ The script goes through several steps:
 - `--min_silence_len` - minimum length (in ms) of silence when splitting vocals into chunks. Default is 350.
 - `--silence_thresh` - Silence threshold (in dBFS) used when splitting vocals. Anything quieter than this will be considered silence. Default is -48.
 - `--audio_bitrate` - Bitrate, in kbps, of the final output audio. Default is 128.
+- `--skip_uvr` - Skips Ultimate Vocal Remover inference. Only do this if your input vocals are already clean.
 - `-k`/`--keep_temp_files` - Keep intermediate temp files. Warning: This can result in a lot of clutter in your current working directory, so only use this flag if you want to debug something like the segment silence threshold or inspect the original vocal track or something.
 
 ## Context Specific Command-Line Arguments
