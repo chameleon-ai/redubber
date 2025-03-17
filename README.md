@@ -3,6 +3,7 @@ Redubs audio or video with any voice using zero-shot voice cloning.\
 (It runs stuff through a voice changer, basically.)\
 The video stream is copied and the audio is split between a vocal and instrumental track before changing the vocals.\
 Therefore, the final output has a different voice with preserved background noise.
+This project also attempts to work around the limitations of vevo by splitting arbitrarily long audio into segments separated by silence.
 
 This project leverages the following repositories:
 

@@ -304,8 +304,9 @@ if __name__ == '__main__':
             shutil.move(recombined_video, output_filename)
             print('Output file: {}'.format(output_filename))
         else:
-            split = os.path.splitext(os.path.basename(input_filename))
-            output_filename = split[0] + '_(Redub)' + split[-1]
+            basename = os.path.splitext(os.path.basename(input_filename))[0]
+            ext = os.path.splitext(os.path.basename(recombined_audio))[-1]
+            output_filename = basename + '_(Redub)' + ext
             shutil.move(recombined_audio, output_filename)
             print('Output file: {}'.format(output_filename))
     except argparse.ArgumentError as e:
