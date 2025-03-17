@@ -166,18 +166,33 @@ def prepare_vocal_segments(input_vocal_stem : str, max_duration : float, min_sil
     return segments
 
 # Concatenate all vocal segments back into one segment
-def recombine_segments(original_input : str, vocal_segments : list):
+def recombine_segments(original_input : str, converted_segments : list, original_segments : list):
     print('Combining vocal segments.')
     recombined = AudioSegment.empty()
-    for seg in vocal_segments:
+    if len(converted_segments) != len(original_segments):
+        raise RuntimeError("Converted segment count {} doesn't match original segment count of {}. Something went wrong during vocal conversion.".format(len(converted_segments), len(original_segments)))
+    for idx,seg in enumerate(converted_segments):
         next_segment = AudioSegment.from_file(seg)
+        # Sometimes, segment length doesn't match the original. We have to trim or extend to keep in sync.
+        original_seg_duration = get_audio_duration(original_segments[idx])
+        if abs(original_seg_duration - next_segment.duration_seconds) > 0.01:
+            #print('Converted segment duration: {:.3f}, original segment duration: {:.3f}'.format(next_segment.duration_seconds, original_seg_duration))
+            if original_seg_duration > next_segment.duration_seconds:
+                diff_ms = int((original_seg_duration - next_segment.duration_seconds) * 1000)
+                print('Extending segment {} by {} ms'.format(idx, diff_ms))
+                filler = AudioSegment.silent(duration=diff_ms)
+                next_segment = next_segment + filler
+            elif original_seg_duration < next_segment.duration_seconds:
+                diff_ms = int((next_segment.duration_seconds - original_seg_duration) * 1000)
+                print('Trimming segment {} by {} ms'.format(idx, diff_ms))
+                next_segment = next_segment[:-diff_ms]
         recombined = recombined + next_segment
     output_filename = os.path.splitext(os.path.basename(original_input))[0] + '_(Recombined).mp3'
     recombined.export(output_filename, format="mp3", bitrate="192k")
     return output_filename
 
 # Overlay the vocal and instrumental stems back on top of each other
-def recombine_stems(original_input : str, input_vocal_stem : str, input_instrumental_stem : str, instrumental_volume : int, vocal_volume : int, audio_bitrate : int):
+def overlay_stems(original_input : str, input_vocal_stem : str, input_instrumental_stem : str, instrumental_volume : int, vocal_volume : int, audio_bitrate : int):
     print('Overlaying vocal and instrumental stems.')
     vocal_segment = AudioSegment.from_file(input_vocal_stem)
     instrumental_segment = AudioSegment.from_file(input_instrumental_stem)
@@ -263,9 +278,9 @@ if __name__ == '__main__':
         print('Total segments to process: {}'.format(len(vocal_segments)))
         coverted_vocals = vevo_infer(vocal_segments, reference_voice, inference_mode=args.inference_mode, flow_matching_steps = args.steps)
         files_to_clean.extend(coverted_vocals)
-        reassembled_vocals = recombine_segments(uvr_input, coverted_vocals)
+        reassembled_vocals = recombine_segments(uvr_input, coverted_vocals, vocal_segments)
         files_to_clean.append(reassembled_vocals)
-        recombined_audio = recombine_stems(uvr_input, reassembled_vocals, intrumental_stem, args.instrumental_volume, args.vocal_volume, args.audio_bitrate)
+        recombined_audio = overlay_stems(uvr_input, reassembled_vocals, intrumental_stem, args.instrumental_volume, args.vocal_volume, args.audio_bitrate)
         
         if video_no_audio is not None:
             files_to_clean.append(recombined_audio)
