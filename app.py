@@ -217,7 +217,7 @@ if __name__ == '__main__':
             epilog='Specify the inputs on the command-line. Use -i and -v to explicitly specify input type if context specific parsing fails.')
         parser.add_argument('-i', '--input', type=str, help='Input video or audio to process')
         parser.add_argument('-v', '--reference_voice', type=str, help='Voice reference to redub with')
-        parser.add_argument('--inference_mode', type=str, default='timbre', choices=['timbre','style'], help='Vevo inference type. "style" is less reliable but attempts to mimic the reference accent.')
+        parser.add_argument('--inference_mode', type=str, default='timbre', choices=['timbre','style','voice'], help='Vevo inference type. "style" and "voice" are less reliable but attempt more accurate accents.')
         parser.add_argument('--steps', type=int, default=48, help='Vevo flow matching steps.')
         parser.add_argument('--instrumental_volume', type=int, default=0, help='Boost (or reduce) volume of the instrumental track, in dB')
         parser.add_argument('--vocal_volume', type=int, default=0, help='Boost (or reduce) volume of the vocal track, in dB')
@@ -264,7 +264,7 @@ if __name__ == '__main__':
             files_to_clean.extend([video_no_audio, audio_no_video])
             uvr_input = audio_no_video
         if args.max_segment_duration is None: # Set the max segment depending on the inference mode, if it's not user defined
-            args.max_segment_duration = 10.0 if args.inference_mode == 'style' else 30.0
+            args.max_segment_duration = 30.0 if args.inference_mode == 'timbre' else 10.0
 
         # Assert appropriate reference audio duration depending on inference mode
         reference_duration = get_audio_duration(reference_voice)

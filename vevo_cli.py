@@ -13,14 +13,21 @@ from huggingface_hub import snapshot_download
 def run_inference(pipeline : vevo_utils.VevoInferencePipeline,
                   mode : str,
                   content : str,
-                  ref_style : str,
                   ref_timbre : str,
                   steps : int):
     if mode == 'style':
         return pipeline.inference_ar_and_fm(
             src_wav_path=content,
             src_text=None,
-            style_ref_wav_path=ref_style,
+            style_ref_wav_path=ref_timbre,
+            timbre_ref_wav_path=content,
+            flow_matching_steps=steps
+        )
+    elif mode == 'voice':
+        return pipeline.inference_ar_and_fm(
+            src_wav_path=content,
+            src_text=None,
+            style_ref_wav_path=ref_timbre,
             timbre_ref_wav_path=ref_timbre,
             flow_matching_steps=steps
         )
@@ -107,7 +114,7 @@ def vevo_infer(voice_segments : list, reference_voice : str, inference_mode = 't
     for segment in voice_segments:
         output_filename = '{}_({}).wav'.format(os.path.splitext(os.path.basename(segment))[0], os.path.splitext(os.path.basename(reference_voice))[0])
         print(output_filename)
-        gen_audio = run_inference(pipeline, inference_mode, segment, reference_voice, reference_voice, flow_matching_steps)
+        gen_audio = run_inference(pipeline, inference_mode, segment, reference_voice, flow_matching_steps)
         vevo_utils.save_audio(gen_audio, target_sample_rate=48000, output_path=output_filename)
         outputs.append(output_filename)
     return outputs

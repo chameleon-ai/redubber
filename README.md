@@ -47,7 +47,7 @@ The script goes through several steps:
 ## Command-Line Flags
 - `-i`/`--input` - The input file to redub (i.e. `-i input.mp4`)
 - `-v`/`--reference_voice` - The reference voice to redub with (i.e. `-v reference.wav`)
-- `--inference_mode` - The vevo inference mode to use, either `timbre` or `style`. The default, `timbre`, uses the reference voiceprint, but the input accent will remain. `style` mode attempts to mimic the reference accent, but it is less reliable than `timbre` mode and requires shorter audio segments. Maximum reference voice length in `timbre` mode is 45 seconds, while maximum reference voice length in `style` mode is 15 seconds.
+- `--inference_mode` - The vevo inference mode to use, either `timbre`, `voice`, or `style`. The default, `timbre`, uses the reference voiceprint, but the input accent will remain. `style` mode attempts to mimic the reference accent, and keep the input timbre. `style` and `voice` are less reliable than `timbre` mode and requires shorter audio segments. Maximum reference voice length in `timbre` mode is 45 seconds, while maximum reference voice length in `style` and `voice` mode is 15 seconds.
 - `--steps` - The number of vevo flow matching steps. Default is 48. Typically you don't have to mess with this.
 - `--instrumental_volume` - Adjust the volume, in dB, of the instrumental track by this amount (i.e. `--instrumental_volume -3` will reduce the volume by 3dB)
 - `--vocal_volume` - Adjust the volume, in dB, of the vocal track by this amount (i.e. `--vocal_volume 4` will boost the volume by 4dB). You may want to do this if the output voice is too quiet.
