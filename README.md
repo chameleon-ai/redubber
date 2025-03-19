@@ -37,7 +37,7 @@ The script goes through several steps:
 - This is developed on python 3.10 Linux+AMD (ROCM 6.2.4). I can't speak for compatibility with other configurations.
 
 ## Usage
-- Prepare about 30 seconds of your reference voice as an `.mp3` or `.wav`, we'll call this `reference.wav`, but it can have any name.
+- Prepare 15-30 seconds of your reference voice as an `.mp3` or `.wav`, we'll call this `reference.wav`, but it can have any name.
 - Find the video or audio that you want to redub. We'll call this `input.mp4`. It can be of any length, but anything longer than 30 seconds will be split.
 - Activate your vitual environment
 - Invoke the script: `python app.py -i input.mp4 -v reference.wav`
@@ -47,7 +47,7 @@ The script goes through several steps:
 ## Command-Line Flags
 - `-i`/`--input` - The input file to redub (i.e. `-i input.mp4`)
 - `-v`/`--reference_voice` - The reference voice to redub with (i.e. `-v reference.wav`)
-- `--inference_mode` - The vevo inference mode to use, either `timbre`, `voice`, or `style`. The default, `timbre`, uses the reference voiceprint, but the input accent will remain. `style` mode attempts to mimic the reference accent, and keep the input timbre. `style` and `voice` are less reliable than `timbre` mode and requires shorter audio segments. Maximum reference voice length in `timbre` mode is 45 seconds, while maximum reference voice length in `style` and `voice` mode is 15 seconds.
+- `--inference_mode` - The vevo inference mode to use, either `timbre`, `voice`, or `style`. The default, `timbre`, uses the reference voiceprint, but the input accent will remain. `style` mode attempts to mimic the reference accent, and keep the input timbre. `voice` mode attempts to mimic the reference timbre and accent. `style` and `voice` are less reliable than `timbre` mode and requires shorter audio segments. Maximum reference voice length in `timbre` mode is 45 seconds, while maximum reference voice length in `style` and `voice` mode is 15 seconds.
 - `--steps` - The number of vevo flow matching steps. Default is 48. Typically you don't have to mess with this.
 - `--instrumental_volume` - Adjust the volume, in dB, of the instrumental track by this amount (i.e. `--instrumental_volume -3` will reduce the volume by 3dB)
 - `--vocal_volume` - Adjust the volume, in dB, of the vocal track by this amount (i.e. `--vocal_volume 4` will boost the volume by 4dB). You may want to do this if the output voice is too quiet.
