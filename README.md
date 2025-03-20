@@ -56,6 +56,7 @@ The script goes through several steps:
 - `--silence_thresh` - Silence threshold (in dBFS) used when splitting vocals. Anything quieter than this will be considered silence. Default is -48.
 - `--audio_bitrate` - Bitrate, in kbps, of the final output audio. Default is 128.
 - `--skip_uvr` - Skips Ultimate Vocal Remover inference. Only do this if your input vocals are already clean.
+- `--skip_trim` - Sometimes the output audio length doesn't match the input. In this case, the output is trimmed (or silence is added) to make the segment fit the input duration. This flag skips that step. Only do this if you don't care about the output being out of sync with the input.
 - `-k`/`--keep_temp_files` - Keep intermediate temp files. Warning: This can result in a lot of clutter in your current working directory, so only use this flag if you want to debug something like the segment silence threshold or inspect the original vocal track or something.
 
 ## Context Specific Command-Line Arguments

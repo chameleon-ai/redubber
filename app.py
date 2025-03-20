@@ -166,7 +166,7 @@ def prepare_vocal_segments(input_vocal_stem : str, max_duration : float, min_sil
     return segments
 
 # Concatenate all vocal segments back into one segment
-def recombine_segments(original_input : str, converted_segments : list, original_segments : list):
+def recombine_segments(original_input : str, converted_segments : list, original_segments : list, sync_segments : bool):
     print('Combining vocal segments.')
     recombined = AudioSegment.empty()
     if len(converted_segments) != len(original_segments):
@@ -175,7 +175,7 @@ def recombine_segments(original_input : str, converted_segments : list, original
         next_segment = AudioSegment.from_file(seg)
         # Sometimes, segment length doesn't match the original. We have to trim or extend to keep in sync.
         original_seg_duration = get_audio_duration(original_segments[idx])
-        if abs(original_seg_duration - next_segment.duration_seconds) > 0.01:
+        if sync_segments and (abs(original_seg_duration - next_segment.duration_seconds) > 0.01):
             #print('Converted segment duration: {:.3f}, original segment duration: {:.3f}'.format(next_segment.duration_seconds, original_seg_duration))
             if original_seg_duration > next_segment.duration_seconds:
                 diff_ms = int((original_seg_duration - next_segment.duration_seconds) * 1000)
@@ -226,6 +226,7 @@ if __name__ == '__main__':
         parser.add_argument('--silence_thresh', type=int, default=-48, help='(in dBFS) anything quieter than this will be considered silence')
         parser.add_argument('--audio_bitrate', type=int, default=128, help='Bitrate, in kbps, of the final output audio. Default is 128.')
         parser.add_argument('--skip_uvr', action='store_true', help='Skip Ultimate Vocal Remover inference')
+        parser.add_argument('--skip_trim', action='store_true', help='Skip trimming and extending when reassembling output segments. This may cause a desync in the output video.')
         parser.add_argument('-k', '--keep_temp_files', action='store_true', help='Keep intermediate temp files')
         args, unknown_args = parser.parse_known_args()
         input_filename = None
@@ -286,7 +287,7 @@ if __name__ == '__main__':
         print('Total segments to process: {}'.format(len(vocal_segments)))
         coverted_vocals = vevo_infer(vocal_segments, reference_voice, inference_mode=args.inference_mode, flow_matching_steps = args.steps)
         files_to_clean.extend(coverted_vocals)
-        reassembled_vocals = recombine_segments(uvr_input, coverted_vocals, vocal_segments)
+        reassembled_vocals = recombine_segments(uvr_input, coverted_vocals, vocal_segments, not args.skip_trim)
         files_to_clean.append(reassembled_vocals)
 
         # If uvr was skipped, we don't have to overlay the vocal + instrumental stems
