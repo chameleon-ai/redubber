@@ -11,6 +11,9 @@ https://github.com/Anjok07/ultimatevocalremovergui
 
 https://github.com/open-mmlab/Amphion
 
+Video Rundown:\
+[![YouTube Video](https://img.youtube.com/vi/eQjZxfjdS-U/0.jpg)](https://www.youtube.com/watch?v=eQjZxfjdS-U)
+
 ## How Does it Work?
 The script goes through several steps:
 - Separate the audio from the video (the video bitstream is copied, so there is no re-encoding)
