@@ -1,8 +1,10 @@
 __pycache__/
 venv/
 models/.cache
-models/MDX23C_models
+models/karafan
 models/Vevo
+models/Vevo1.5
+models/whisper
 *.mp3
 *.wav
 *.webm

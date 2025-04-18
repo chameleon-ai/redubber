@@ -8,7 +8,6 @@ import traceback
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
 from uvr_cli import uvr_separate
-from vevo_cli import vevo_infer
 
 files_to_clean = [] # List of temp files to be cleaned up at the end
 do_cleanup = True
@@ -216,19 +215,25 @@ if __name__ == '__main__':
             description='Redubs audio or video using a reference voice.',
             epilog='Specify the inputs on the command-line. Use -i and -v to explicitly specify input type if context specific parsing fails.')
         parser.add_argument('-i', '--input', type=str, help='Input video or audio to process')
+        parser.add_argument('-k', '--keep_temp_files', action='store_true', help='Keep intermediate temp files')
         parser.add_argument('-v', '--reference_voice', type=str, help='Voice reference to redub with')
-        parser.add_argument('--inference_mode', type=str, default='timbre', choices=['timbre','style','voice'], help='Vevo inference type. "style" and "voice" are less reliable but attempt more accurate accents.')
-        parser.add_argument('--steps', type=int, default=48, help='Vevo flow matching steps.')
-        parser.add_argument('--instrumental_volume', type=int, default=0, help='Boost (or reduce) volume of the instrumental track, in dB')
-        parser.add_argument('--vocal_volume', type=int, default=0, help='Boost (or reduce) volume of the vocal track, in dB')
-        parser.add_argument('--max_segment_duration', type=float, help='Maximum vocal segment duration, in seconds.')
-        parser.add_argument('--min_silence_len', type=int, default=350, help='minimum length (in ms) of silence when splitting vocals into chunks')
-        parser.add_argument('--silence_thresh', type=int, default=-48, help='(in dBFS) anything quieter than this will be considered silence')
         parser.add_argument('--audio_bitrate', type=int, default=128, help='Bitrate, in kbps, of the final output audio. Default is 128.')
+        parser.add_argument('--inference_mode', type=str, default='timbre', choices=['timbre','style','voice'], help='Vevo inference type. "style" and "voice" are less reliable but attempt more accurate accents.')
+        parser.add_argument('--instrumental_volume', type=int, default=0, help='Boost (or reduce) volume of the instrumental track, in dB')
+        parser.add_argument('--ref_language', type=str, default='en', choices=['en', 'zh'], help='Reference language (used by whisper transcription for vevo 1.5 style)')
+        parser.add_argument('--input_language', type=str, default='en', choices=['en', 'zh'], help='Source language (used by whisper transcription for vevo 1.5 style)')
+        parser.add_argument('--silence_thresh', type=int, default=-48, help='(in dBFS) anything quieter than this will be considered silence')
         parser.add_argument('--skip_uvr', action='store_true', help='Skip Ultimate Vocal Remover inference')
         parser.add_argument('--skip_trim', action='store_true', help='Skip trimming and extending when reassembling output segments. This may cause a desync in the output video.')
-        parser.add_argument('-k', '--keep_temp_files', action='store_true', help='Keep intermediate temp files')
+        parser.add_argument('--steps', type=int, default=48, help='Vevo flow matching steps.')
+        parser.add_argument('--max_segment_duration', type=float, help='Maximum vocal segment duration, in seconds.')
+        parser.add_argument('--min_silence_len', type=int, default=350, help='minimum length (in ms) of silence when splitting vocals into chunks')
+        parser.add_argument('--vevo_model', type=str, default='1', choices=['1', '1.5'], help='Vevo model version, either 1 or 1.5 (a.k.a vevosing)')
+        parser.add_argument('--vocal_volume', type=int, default=0, help='Boost (or reduce) volume of the vocal track, in dB')
+        
         args, unknown_args = parser.parse_known_args()
+        if help in args:
+            parser.print_help()
         input_filename = None
         reference_voice = None
         if args.keep_temp_files:
@@ -254,8 +259,6 @@ if __name__ == '__main__':
             raise RuntimeError('Reference voice sample required.')
         else: # Convert specified reference to wav if necessary
             reference_voice = get_wav(args.reference_voice)
-        if help in args:
-            parser.print_help()
         input_category, input_mimetype = mimetypes.guess_type(input_filename)[0].split('/')
         uvr_input = input_filename
         video_no_audio = None
@@ -264,8 +267,6 @@ if __name__ == '__main__':
             video_no_audio, audio_no_video = separate_audio_from_video(input_filename)
             files_to_clean.extend([video_no_audio, audio_no_video])
             uvr_input = audio_no_video
-        if args.max_segment_duration is None: # Set the max segment depending on the inference mode, if it's not user defined
-            args.max_segment_duration = 30.0 if args.inference_mode == 'timbre' else 10.0
 
         # Assert appropriate reference audio duration depending on inference mode
         reference_duration = get_audio_duration(reference_voice)
@@ -282,10 +283,25 @@ if __name__ == '__main__':
         else:
             vocal_stem = uvr_input
         
+        if args.max_segment_duration is None:
+            if args.vevo_model == '1' and args.inference_mode == 'timbre':
+                args.max_segment_duration = 45.0 # only vevo 1 timbre can take a long segment
+            else:
+                args.max_segment_duration= 12
         vocal_segments = prepare_vocal_segments(vocal_stem, args.max_segment_duration, args.min_silence_len, args.silence_thresh)
         files_to_clean.extend(vocal_segments)
         print('Total segments to process: {}'.format(len(vocal_segments)))
-        coverted_vocals = vevo_infer(vocal_segments, reference_voice, inference_mode=args.inference_mode, flow_matching_steps = args.steps)
+        if args.vevo_model == '1':
+            from vevo_cli import vevo_infer
+            coverted_vocals = vevo_infer(vocal_segments, reference_voice, inference_mode=args.inference_mode, flow_matching_steps = args.steps)
+        elif args.vevo_model == '1.5':
+            from vevosing_cli import vevosing_infer
+            coverted_vocals = vevosing_infer(vocal_segments,
+                                             reference_voice,
+                                             inference_mode=args.inference_mode,
+                                             flow_matching_steps = args.steps,
+                                             src_language = args.input_language,
+                                             ref_language = args.ref_language)
         files_to_clean.extend(coverted_vocals)
         reassembled_vocals = recombine_segments(uvr_input, coverted_vocals, vocal_segments, not args.skip_trim)
         files_to_clean.append(reassembled_vocals)
@@ -301,13 +317,13 @@ if __name__ == '__main__':
             files_to_clean.append(recombined_audio)
             recombined_video = combine_audio_and_video(video_no_audio, recombined_audio, args.audio_bitrate)
             split = os.path.splitext(os.path.basename(input_filename))
-            output_filename = split[0] + '_(Redub)' + split[-1]
+            output_filename = f'{split[0]}_(Redub-{args.inference_mode}){split[-1]}'
             shutil.move(recombined_video, output_filename)
             print('Output file: {}'.format(output_filename))
         else:
             basename = os.path.splitext(os.path.basename(input_filename))[0]
             ext = os.path.splitext(os.path.basename(recombined_audio))[-1]
-            output_filename = basename + '_(Redub)' + ext
+            output_filename = f'{basename}_(Redub-{args.inference_mode}){ext}'
             shutil.move(recombined_audio, output_filename)
             print('Output file: {}'.format(output_filename))
     except argparse.ArgumentError as e:

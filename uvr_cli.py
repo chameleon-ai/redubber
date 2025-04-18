@@ -369,9 +369,9 @@ def uvr_separate(filename : str, export_path = './', count = 1, cpu_only = False
     # Download the model if it's not downloaded yet
     if not os.path.exists(MDX_MODELS_DIR):
         os.makedirs(MDX_MODELS_DIR)
-    hf_hub_download(repo_id="Politrees/UVR_resources", filename="MDX23C_models/MDX23C-8KFFT-InstVoc_HQ.ckpt", local_dir=MDX_MODELS_DIR)
+    hf_hub_download(repo_id="SayanoAI/RVC-Studio", repo_type="dataset", filename="karafan/MDX23C-8KFFT-InstVoc_HQ.ckpt", local_dir=MDX_MODELS_DIR)
     print('Initializing UVR...',end='')
-    model = ModelData(model_name='MDX23C_models/MDX23C-8KFFT-InstVoc_HQ.ckpt')
+    model = ModelData(model_name='karafan/MDX23C-8KFFT-InstVoc_HQ.ckpt')
     if cpu_only:
         model.is_gpu_conversion = -1
     audio_file_base = f"{count}_{os.path.splitext(os.path.basename(filename))[0]}"

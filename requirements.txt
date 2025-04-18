@@ -40,7 +40,10 @@ onnxruntime
 unidecode
 inflect
 phonemizer
-LangSegment
+git+https://github.com/chameleon-ai/LangSegment-0.3.5-backup.git
+praat-parselmouth
+torchcrepe
+git+https://github.com/openai/whisper.git
 standard-aifc; python_version>='3.13'
 standard-sunau; python_version>='3.13'
 audioop-lts; python_version>='3.13'
