@@ -61,6 +61,12 @@ The script goes through several steps:
 - `--skip_uvr` - Skips Ultimate Vocal Remover inference. Only do this if your input vocals are already clean.
 - `--skip_trim` - Sometimes the output audio length doesn't match the input. In this case, the output is trimmed (or silence is added) to make the segment fit the input duration. This flag skips that step. Only do this if you don't care about the output being out of sync with the input.
 - `-k`/`--keep_temp_files` - Keep intermediate temp files. Warning: This can result in a lot of clutter in your current working directory, so only use this flag if you want to debug something like the segment silence threshold or inspect the original vocal track or something.
+- `--vevo_model` - The vevo model to use, either `1` or `1.5`. Default is `1`.
+- `--vevo_model` - The vevo model to use, either `1` or `1.5`. Default is `1`.
+- `-d`/`--in_dir` - An input directory to batch process. If no `--out_dir` is specified, an output directory named after the in_dir will be made appended with `.out`
+- `-o`/`--out_dir` - Files will get placed into this output directory if specified.
+- `--ref_language` - Reference language (used by whisper transcription for vevo 1.5 style and voice). Default is `en`.
+- `--input_language` - Source language (used by whisper transcription for vevo 1.5 style and voice). Default is `en`.
 
 ## Context Specific Command-Line Arguments
 It's recommended to use the command-line flags above, but if a file is specified without command-line flags (i.e. `python app.py input.mp4 reference.wav`), the script will attempt to figure out which is the input and which is the reference depending on metadata and context:
