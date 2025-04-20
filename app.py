@@ -205,7 +205,31 @@ def overlay_stems(original_input : str, input_vocal_stem : str, input_instrument
     output_filename = os.path.splitext(os.path.basename(original_input))[0] + '_(Overlaid).mp3'
     overlaid.export(output_filename, format="mp3", bitrate="{}k".format(audio_bitrate))
     return output_filename
-     
+
+def change_file_directory(filename, new_output_path):
+    """
+    Moves a file to a new directory.
+
+    Parameters:
+    filename (str): The full path to the file to be moved.
+    new_output_path (str): The new directory where the file should be moved.
+
+    Raises:
+    FileNotFoundError: If the specified file does not exist.
+    
+    Returns:
+    str: The new full path of the file.
+    """
+    # Ensure the new output path exists
+    os.makedirs(new_output_path, exist_ok=True)
+
+    # Get the base name of the file (i.e., the file name without the directory)
+    file_name = os.path.basename(filename)
+
+    # Create the new full path for the file
+    new_file_path = os.path.join(new_output_path, file_name)
+
+    return new_file_path
 
 if __name__ == '__main__':
     try:
@@ -215,6 +239,8 @@ if __name__ == '__main__':
             description='Redubs audio or video using a reference voice.',
             epilog='Specify the inputs on the command-line. Use -i and -v to explicitly specify input type if context specific parsing fails.')
         parser.add_argument('-i', '--input', type=str, help='Input video or audio to process')
+        parser.add_argument('-d', '--in_dir', type=str, help='Input directory. All found video and audio will be processed.')
+        parser.add_argument('-o', '--out_dir', type=str, help='Output directory to use when batch processing from --in_dir.')
         parser.add_argument('-k', '--keep_temp_files', action='store_true', help='Keep intermediate temp files')
         parser.add_argument('-v', '--reference_voice', type=str, help='Voice reference to redub with')
         parser.add_argument('--audio_bitrate', type=int, default=128, help='Bitrate, in kbps, of the final output audio. Default is 128.')
@@ -234,12 +260,12 @@ if __name__ == '__main__':
         args, unknown_args = parser.parse_known_args()
         if help in args:
             parser.print_help()
-        input_filename = None
+        input_filenames = []
         reference_voice = None
         if args.keep_temp_files:
             do_cleanup = False
         if args.input is not None: # Input was explicitly specified
-            input_filename = args.input
+            input_filenames.append(args.input)
         if len(unknown_args) > 0: # Input was specified as an unknown argument, attempt smart context parsing
             for arg in unknown_args:
                 if os.path.isfile(arg): 
@@ -247,85 +273,107 @@ if __name__ == '__main__':
                     #print('{}/{}'.format(category,mimetype))
                     if category == 'video' and args.input is None:
                         args.input = arg
-                        input_filename = arg
+                        input_filenames.append(arg)
                     # Ambiguous case where audio is specified but can't differentiate between input to process and voice reference
                     elif category == 'audio' and args.input is None and args.reference_voice is None:
                         raise RuntimeError("Can't determine if audio file should be input or reference voice. Please specify -i or -v explicitly.")
                     elif category == 'audio' and args.reference_voice is None:
                         args.reference_voice = arg
                     elif category == 'audio' and args.input is None:
-                        input_filename = arg
+                        input_filenames.append(arg)
         if args.reference_voice is None:
             raise RuntimeError('Reference voice sample required.')
         else: # Convert specified reference to wav if necessary
             reference_voice = get_wav(args.reference_voice)
-        input_category, input_mimetype = mimetypes.guess_type(input_filename)[0].split('/')
-        uvr_input = input_filename
-        video_no_audio = None
-        if input_category == 'video':
-            print('Separating audio from video')
-            video_no_audio, audio_no_video = separate_audio_from_video(input_filename)
-            files_to_clean.extend([video_no_audio, audio_no_video])
-            uvr_input = audio_no_video
-
+        
         # Assert appropriate reference audio duration depending on inference mode
         reference_duration = get_audio_duration(reference_voice)
         max_reference_duration = 45.0 if args.inference_mode == 'timbre' else 15.0
         if reference_duration > max_reference_duration:
             raise RuntimeError('Reference audio duration of {} seconds exceeds max duration of {} seconds for {} inference mode. Please use shorter reference voice.'.format(reference_duration, max_reference_duration, args.inference_mode))
-
-        # Detect if we want to skip the uvr step
-        vocal_stem = None
-        intrumental_stem = None
-        if not args.skip_uvr:
-            vocal_stem, intrumental_stem = uvr_separate(uvr_input)
-            files_to_clean.extend([vocal_stem, intrumental_stem])
-        else:
-            vocal_stem = uvr_input
         
         if args.max_segment_duration is None:
             if args.vevo_model == '1' and args.inference_mode == 'timbre':
                 args.max_segment_duration = 45.0 # only vevo 1 timbre can take a long segment
             else:
                 args.max_segment_duration= 12
-        vocal_segments = prepare_vocal_segments(vocal_stem, args.max_segment_duration, args.min_silence_len, args.silence_thresh)
-        files_to_clean.extend(vocal_segments)
-        print('Total segments to process: {}'.format(len(vocal_segments)))
-        if args.vevo_model == '1':
-            from vevo_cli import vevo_infer
-            coverted_vocals = vevo_infer(vocal_segments, reference_voice, inference_mode=args.inference_mode, flow_matching_steps = args.steps)
-        elif args.vevo_model == '1.5':
-            from vevosing_cli import vevosing_infer
-            coverted_vocals = vevosing_infer(vocal_segments,
-                                             reference_voice,
-                                             inference_mode=args.inference_mode,
-                                             flow_matching_steps = args.steps,
-                                             src_language = args.input_language,
-                                             ref_language = args.ref_language)
-        files_to_clean.extend(coverted_vocals)
-        reassembled_vocals = recombine_segments(uvr_input, coverted_vocals, vocal_segments, not args.skip_trim)
-        files_to_clean.append(reassembled_vocals)
-
-        # If uvr was skipped, we don't have to overlay the vocal + instrumental stems
-        recombined_audio = None
-        if not args.skip_uvr:
-            recombined_audio = overlay_stems(uvr_input, reassembled_vocals, intrumental_stem, args.instrumental_volume, args.vocal_volume, args.audio_bitrate)
-        else:
-            recombined_audio = reassembled_vocals
         
-        if video_no_audio is not None:
-            files_to_clean.append(recombined_audio)
-            recombined_video = combine_audio_and_video(video_no_audio, recombined_audio, args.audio_bitrate)
-            split = os.path.splitext(os.path.basename(input_filename))
-            output_filename = f'{split[0]}_(Redub-{args.inference_mode}){split[-1]}'
-            shutil.move(recombined_video, output_filename)
-            print('Output file: {}'.format(output_filename))
-        else:
-            basename = os.path.splitext(os.path.basename(input_filename))[0]
-            ext = os.path.splitext(os.path.basename(recombined_audio))[-1]
-            output_filename = f'{basename}_(Redub-{args.inference_mode}){ext}'
-            shutil.move(recombined_audio, output_filename)
-            print('Output file: {}'.format(output_filename))
+        # If --in_dir was specified, add all files
+        if args.in_dir is not None:
+            if os.path.isdir(args.in_dir):
+                filenames = [os.path.join(dirpath,f) for (dirpath, dirnames, filenames) in os.walk(args.in_dir) for f in filenames]
+                for filename in filenames:
+                    category = mimetypes.guess_type(filename)[0].split('/')[0]
+                    # Only add relevant files from the directory
+                    if category == 'video' or category == 'audio':
+                        input_filenames.append(filename)
+            else:
+                raise RuntimeError(f'--in_dir "{args.in_dir}" is not a directory or does not exist.')
+            if args.out_dir is None:
+                args.out_dir = args.in_dir + '.out'
+            print(f'Output directory: "{args.out_dir}"')
+
+        for input_filename in input_filenames:
+            print(f'Processing "{input_filename}"')
+            input_category, input_mimetype = mimetypes.guess_type(input_filename)[0].split('/')
+            uvr_input = input_filename
+            video_no_audio = None
+            if input_category == 'video':
+                print('Separating audio from video')
+                video_no_audio, audio_no_video = separate_audio_from_video(input_filename)
+                files_to_clean.extend([video_no_audio, audio_no_video])
+                uvr_input = audio_no_video
+            # Detect if we want to skip the uvr step
+            vocal_stem = None
+            intrumental_stem = None
+            if not args.skip_uvr:
+                vocal_stem, intrumental_stem = uvr_separate(uvr_input)
+                files_to_clean.extend([vocal_stem, intrumental_stem])
+            else:
+                vocal_stem = uvr_input
+
+            vocal_segments = prepare_vocal_segments(vocal_stem, args.max_segment_duration, args.min_silence_len, args.silence_thresh)
+            files_to_clean.extend(vocal_segments)
+            print('Total segments to process: {}'.format(len(vocal_segments)))
+            if args.vevo_model == '1':
+                from vevo_cli import vevo_infer
+                coverted_vocals = vevo_infer(vocal_segments, reference_voice, inference_mode=args.inference_mode, flow_matching_steps = args.steps)
+            elif args.vevo_model == '1.5':
+                from vevosing_cli import vevosing_infer
+                coverted_vocals = vevosing_infer(vocal_segments,
+                                                reference_voice,
+                                                inference_mode=args.inference_mode,
+                                                flow_matching_steps = args.steps,
+                                                src_language = args.input_language,
+                                                ref_language = args.ref_language)
+            files_to_clean.extend(coverted_vocals)
+            reassembled_vocals = recombine_segments(uvr_input, coverted_vocals, vocal_segments, not args.skip_trim)
+            files_to_clean.append(reassembled_vocals)
+
+            # If uvr was skipped, we don't have to overlay the vocal + instrumental stems
+            recombined_audio = None
+            if not args.skip_uvr:
+                recombined_audio = overlay_stems(uvr_input, reassembled_vocals, intrumental_stem, args.instrumental_volume, args.vocal_volume, args.audio_bitrate)
+            else:
+                recombined_audio = reassembled_vocals
+            
+            if video_no_audio is not None:
+                files_to_clean.append(recombined_audio)
+                recombined_video = combine_audio_and_video(video_no_audio, recombined_audio, args.audio_bitrate)
+                split = os.path.splitext(os.path.basename(input_filename))
+                output_filename = f'{split[0]}_(Redub-{args.inference_mode}){split[-1]}'
+                if args.out_dir is not None:
+                    output_filename = change_file_directory(output_filename, args.out_dir)
+                shutil.move(recombined_video, output_filename)
+                print('Output file: {}'.format(output_filename))
+            else:
+                basename = os.path.splitext(os.path.basename(input_filename))[0]
+                ext = os.path.splitext(os.path.basename(recombined_audio))[-1]
+                output_filename = f'{basename}_(Redub-{args.inference_mode}){ext}'
+                if args.out_dir is not None:
+                    output_filename = change_file_directory(output_filename, args.out_dir)
+                shutil.move(recombined_audio, output_filename)
+                print('Output file: {}'.format(output_filename))
     except argparse.ArgumentError as e:
         print(e)
     except ValueError as e:
