@@ -288,7 +288,8 @@ if __name__ == '__main__':
         
         # Assert appropriate reference audio duration depending on inference mode
         reference_duration = get_audio_duration(reference_voice)
-        max_reference_duration = 45.0 if args.inference_mode == 'timbre' else 15.0
+        # 45 seconds for vevo 1 timbre, 10 seconds for vevo 1 voice, 30 seconds for vevo 1.5 across all modes
+        max_reference_duration = 45.0 if args.vevo_model == '1' and args.inference_mode == 'timbre' else (10.0 if args.vevo_model == '1' else 30.0)
         if reference_duration > max_reference_duration:
             raise RuntimeError('Reference audio duration of {} seconds exceeds max duration of {} seconds for {} inference mode. Please use shorter reference voice.'.format(reference_duration, max_reference_duration, args.inference_mode))
         
