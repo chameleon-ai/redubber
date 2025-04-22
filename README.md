@@ -34,8 +34,8 @@ The script goes through several steps:
   - https://pytorch.org/
 - Install the dependencies:
   - `pip install -r requirements.txt`
-- Run the app (current working directory needs to be the top level of the repo):
-  - `python app.py -i input.mp4 -v reference.wav`
+- Run the utility (current working directory needs to be the top level of the repo):
+  - `python redubber.py -i input.mp4 -v reference.wav`
   - See usage section below
 - This is developed on python 3.10 Linux+AMD (ROCM 6.2.4). I can't speak for compatibility with other configurations.
 
@@ -43,9 +43,9 @@ The script goes through several steps:
 - Prepare 15-30 seconds of your reference voice as an `.mp3` or `.wav`, we'll call this `reference.wav`, but it can have any name.
 - Find the video or audio that you want to redub. We'll call this `input.mp4`. It can be of any length, but anything longer than 30 seconds will be split.
 - Activate your vitual environment
-- Invoke the script: `python app.py -i input.mp4 -v reference.wav`
+- Invoke the script: `python redubber.py -i input.mp4 -v reference.wav`
 - Note that the first time can take a while because it needs to download models. These are downloaded to the `models` directory.
-- The output will be named after the input, appended with `_(Redub)`, i.e. `input_(Redub).mp4`
+- The output will be named after the input, appended with `_(Redub-timbre)`, i.e. `input_(Redub-timbre).mp4`
 
 ## Command-Line Flags
 - `-i`/`--input` - The input file to redub (i.e. `-i input.mp4`)
@@ -62,14 +62,13 @@ The script goes through several steps:
 - `--skip_trim` - Sometimes the output audio length doesn't match the input. In this case, the output is trimmed (or silence is added) to make the segment fit the input duration. This flag skips that step. Only do this if you don't care about the output being out of sync with the input.
 - `-k`/`--keep_temp_files` - Keep intermediate temp files. Warning: This can result in a lot of clutter in your current working directory, so only use this flag if you want to debug something like the segment silence threshold or inspect the original vocal track or something.
 - `--vevo_model` - The vevo model to use, either `1` or `1.5`. Default is `1`.
-- `--vevo_model` - The vevo model to use, either `1` or `1.5`. Default is `1`.
 - `-d`/`--in_dir` - An input directory to batch process. If no `--out_dir` is specified, an output directory named after the in_dir will be made appended with `.out`
 - `-o`/`--out_dir` - Files will get placed into this output directory if specified.
 - `--ref_language` - Reference language (used by whisper transcription for vevo 1.5 style and voice). Default is `en`.
 - `--input_language` - Source language (used by whisper transcription for vevo 1.5 style and voice). Default is `en`.
 
 ## Context Specific Command-Line Arguments
-It's recommended to use the command-line flags above, but if a file is specified without command-line flags (i.e. `python app.py input.mp4 reference.wav`), the script will attempt to figure out which is the input and which is the reference depending on metadata and context:
+It's recommended to use the command-line flags above, but if a file is specified without command-line flags (i.e. `python redubber.py input.mp4 reference.wav`), the script will attempt to figure out which is the input and which is the reference depending on metadata and context:
 - If a video file is provided, it's assumed to be the input
 - Note that you need to specify the video before the audio, or you'll get an error. The script can only figure out if an audio is the reference if it already has an input.
 - If two audio files are provided, you'll get an error because it doesn't know which is the input and which is the reference. Specify `-i` on one of them and the other will be deduced as the reference, and vice versa.
